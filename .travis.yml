@@ -1,0 +1,32 @@
+language: python
+dist: xenial
+sudo: required
+python:
+  - 3.6
+matrix:
+  include:
+    - env: ARGS=--tracemalloc
+    - env: WRAPPER="valgrind --undef-value-errors=no --leak-check=summary --error-exitcode=1 --keep-stacktraces=none" PACKAGES=valgrind
+    - env: WRAPPER="env MALLOC_CHECK_=3"
+    - env: CFLAGS="-fsanitize=address" LDFLAGS="-fsanitize=address" WRAPPER="env LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libasan.so.2 LSAN_OPTIONS=suppressions=$(pwd)/lsan.suppressions"
+    - env: CC=clang LDSHARED="clang -shared" CFLAGS="-fsanitize=address" WRAPPER="env LD_PRELOAD=/usr/local/clang-7.0.0/lib/clang/7.0.0/lib/linux/libclang_rt.asan-x86_64.so LSAN_OPTIONS=suppressions=$(pwd)/lsan.suppressions"
+      compiler: clang
+    - env: CFLAGS="-fsanitize=address" LDFLAGS="-fsanitize=address" WRAPPER="env LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libasan.so.2 LSAN_OPTIONS=suppressions=$(pwd)/lsan.suppressions" ARGS=--tracemalloc
+    - env: CC=clang LDSHARED="clang -shared" CFLAGS="-fsanitize=address" WRAPPER="env LD_PRELOAD=/usr/local/clang-7.0.0/lib/clang/7.0.0/lib/linux/libclang_rt.asan-x86_64.so LSAN_OPTIONS=suppressions=$(pwd)/lsan.suppressions" ARGS=--tracemalloc
+      compiler: clang
+before_script:
+  - if [ -n "$PACKAGES" ]; then sudo apt-get update -qq; sudo apt-get install $PACKAGES; fi
+  - export CFLAGS="$CFLAGS -O0 -g -DDEBUG"
+  - python setup.py build --debug
+  - mv build/**/*.so .
+  - export PYTHONPATH=.
+script:
+  - if ! $WRAPPER python ./run.py $ARGS no_leak; then false; fi
+  - if $WRAPPER python ./run.py $ARGS leak_int; then false; fi
+  - if $WRAPPER python ./run.py $ARGS doublefree_int; then false; fi
+  - if $WRAPPER python ./run.py $ARGS leak_none; then false; fi
+  - if $WRAPPER python ./run.py $ARGS doublefree_none; then false; fi
+  - if $WRAPPER python ./run.py $ARGS leak_malloc; then false; fi
+  - if $WRAPPER python ./run.py $ARGS doublefree_malloc; then false; fi
+  - if $WRAPPER python ./run.py $ARGS leak_pymem; then false; fi
+  - if $WRAPPER python ./run.py $ARGS doublefree_pymem; then false; fi
